@@ -1,92 +1,101 @@
 <!doctype html>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>AI Analysis Window (Minimal)</title>
-<style>
-  :root { --bg:#fff; --muted:#f7f7f7; --pill:#eef; --text:#111; --accent:#0a66cc; }
-  html,body{margin:0;height:100%;font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;background:var(--bg);color:var(--text)}
-  .wrap{padding:12px;box-sizing:border-box;max-width:960px;margin:0 auto}
-  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .pill{display:inline-block;background:var(--pill);border-radius:999px;padding:2px 8px;font-size:12px}
-  textarea{width:100%;min-height:120px;margin-top:8px;padding:10px;border-radius:8px;border:1px solid #ddd;box-sizing:border-box}
-  pre{white-space:pre-wrap;background:var(--muted);padding:12px;border-radius:8px;margin:8px 0 0}
-  button{padding:8px 12px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer}
-  button.ghost{background:#e7edf3;color:#083b6d}
-  #panel.min{max-height:40px;overflow:hidden}
-  #panel.hide{display:none}
-</style>
-
-<div class="wrap">
-  <h3 style="margin:0 0 8px">AI Analysis Window</h3>
-
-  <!-- 表示/縮小/非表示 -->
-  <div class="row" style="margin:6px 0 10px">
-    <button id="toggle">▼ 表示/縮小/非表示</button>
-    <span id="state" class="pill">表示中</span>
-    <span id="ctx" class="pill"></span>
-  </div>
-
-  <div id="panel">
-    <textarea id="q" placeholder="このダッシュボードの傾向を要約して（例：KPIの増減理由、要注意拠点、今月のリスクなど）"></textarea>
-    <div class="row" style="margin-top:6px">
-      <select id="mode">
-        <option value="brief">ブリーフ（短く）</option>
-        <option value="detailed">詳細（箇条書き）</option>
-      </select>
-      <button id="run">AI分析</button>
-      <button id="clear" class="ghost">クリア</button>
-    </div>
-    <h4 style="margin:12px 0 4px">結果</h4>
-    <pre id="out">（ここに結果）</pre>
-  </div>
-</div>
-
-<script>
-  // ▼ 表示/縮小/非表示
-  const panel = document.getElementById('panel');
-  const stateEl = document.getElementById('state');
-  const toggle = document.getElementById('toggle');
-  let modeView = 'show'; // show -> min -> hide
-  function applyMode(){
-    panel.classList.remove('min','hide');
-    if(modeView==='show'){ stateEl.textContent='表示中'; toggle.textContent='▼ 表示/縮小/非表示';}
-    else if(modeView==='min'){ panel.classList.add('min'); stateEl.textContent='縮小中'; toggle.textContent='◧ 再展開/非表示';}
-    else { panel.classList.add('hide'); stateEl.textContent='非表示'; toggle.textContent='▲ 再表示';}
-  }
-  toggle.onclick = ()=>{ modeView = (modeView==='show')?'min':(modeView==='min')?'hide':'show'; applyMode(); };
-  applyMode();
-
-  // 解析モード（擬似要約：フロントだけで動く簡易ロジック）
-  const qEl = document.getElementById('q');
-  const out = document.getElementById('out');
-  const sel = document.getElementById('mode');
-  const clearBtn = document.getElementById('clear');
-  clearBtn.onclick = ()=>{ qEl.value=''; out.textContent='（ここに結果）'; };
-
-  // LookerのURL埋め込みから期間などを拾って表示（任意）
-  const params = new URLSearchParams(location.search);
-  const start = params.get('start');
-  const end   = params.get('end');
-  const ctx   = document.getElementById('ctx');
-  ctx.textContent = (start || end) ? `期間: ${(start||'…')} ～ ${(end||'…')}` : '期間: (未指定)';
-
-  // 簡易“要約”生成（クライアント側のみ／外部API不使用）
-  function summarize(text, style){
-    const t = (text||'').trim();
-    if(!t) return 'テキストを入力してください。';
-    const lines = t.split(/\n+/).map(s=>s.trim()).filter(Boolean);
-    const bullets = lines.slice(0,6).map((s,i)=>`- ${s}`);
-    if(style==='brief'){
-      return `【サマリ】\n` + (lines[0]?.slice(0,120) || '入力が短すぎます。');
-    } else {
-      return `【主要ポイント】\n` + bullets.join('\n') +
-        `\n\n【次のアクション（例）】\n- 指標の変化が大きいディメンションを深掘り\n- 直近週の異常値をコメント付与\n- 来月のリスク/仮説を1つ書き出し`;
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AI Analysis POC</title>
+  <style>
+    body {
+      font-family: system-ui;
+      margin: 20px;
+      line-height: 1.5;
     }
+    textarea { width: 100%; min-height: 120px; margin-top: 8px; }
+    button { padding: 8px 16px; margin-top: 8px; }
+    pre { background: #f7f7f7; padding: 12px; border-radius: 8px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+
+  <h2>AI分析ウィンドウ（POC）</h2>
+  <textarea id="q" placeholder="例：2025年下期で増患が多かった拠点を分析して"></textarea>
+  <br>
+  <button id="run">AI分析</button>
+  <pre id="out">（ここに結果が出ます）</pre>
+
+  <!-- ✅ seed-data（データ埋め込み） -->
+<script type="application/json" id="seed-data">
+{
+  "schema": ["拠点名","25/04","25/05","25/06","25/07","25/08","25/09","25/10","25/11","総計"],
+  "rows": [
+    ["あげお", null,  null,  35, 24, 22, 10, 12, null, 103],
+    ["そよ風", 25,    44,    57, 75, 77, 73, 34, 1,   386],
+    ["そよ風・白石",29,    23,    25, 30, 67, 13, 18, null,205],
+    ["プリム", null,  null,  null,null,19, 13, 18, 10, 60],
+    ["伊勢崎",34,    25,    44, 24, 31, 28, 22, null,208],
+    ["吉田",  45,    38,    43, 34, 44, 46, 23, 1,   274],
+    ["吉田名西",null,null,  null,null,null,19, 22, 14, 55],
+    ["国分寺",10,    11,    6,  6,  6,  9,  4,  null,52],
+    ["堺",    12,    12,    10, 11, 10, 8,  6,  null,69],
+    ["札幌",  null,  null,  null,null,null,null,8,  null,8],
+    ["市原",  20,    64,    18, 15, 7,  25, 7,  null,156],
+    ["市川",  14,    24,    15, 19, 14, 15, 4,  4,   109],
+    ["守谷",  19,    12,    23, 22, 14, 5,  null,null,95],
+    ["青野",  17,    13,    34, 19, 7,  14, 3,  null,107],
+    ["摂津",  2,     5,     4,  5,  3,  6,  5,  null,30],
+    ["仙台",  5,     5,     21, 19, 32, 38, 25, null,145],
+    ["前橋",  35,    21,    28, 29, 22, 33, 19, null,187],
+    ["蘇我",  37,    30,    35, 28, 2,  null,null,null,132],
+    ["町田",  27,    25,    16, 17, 15, 28, 13, null,141],
+    ["天王町",50,    22,    28, 36, 48, 21, null,null,205],
+    ["南増尾",null,  null,  null,null,16, 7,  null,null,23],
+    ["日立",  4,     15,    8,  12, 10, 12, 9,  null,70],
+    ["八潮",  null,  null,  null,null,23, 19, 21, 18, 81],
+    ["府中",  5,     6,     11, 12, 7,  12, null,null,53],
+    ["豊橋",  13,    7,     10, 10, 14, 13, 3,  null,70]
+  ]
+}
+</script>
+  
+  <!-- ✅ AI分析スクリプト -->
+  <script>
+  const GEMINI_API_KEY = "AIzaSyB1Qf-xLUvF6NZpGXl9r4EHEhNyKrvdXTk"; // ← 差し替え
+
+  async function callGemini(prompt) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-pro:generateContent?key=${GEMINI_API_KEY}`;
+    const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || "応答なし";
   }
 
-  document.getElementById('run').onclick = ()=>{
-    const text = qEl.value;
-    const style = sel.value;
-    out.textContent = summarize(text, style);
+  function summarizeSeed() {
+    const el = document.getElementById("seed-data");
+    const json = JSON.parse(el.textContent);
+    const head = json.schema;
+    const rows = json.rows;
+    const total = rows.reduce((s, r) => s + (r[r.length - 1] || 0), 0);
+    return `拠点数:${rows.length}, 合計:${total}`;
+  }
+
+  document.getElementById("run").onclick = async () => {
+    const q = document.getElementById("q").value;
+    const out = document.getElementById("out");
+    out.textContent = "分析中...";
+    const summary = summarizeSeed();
+    const prompt = `あなたはデータアナリストです。\nデータ要約:${summary}\n質問:${q}`;
+    try {
+      const text = await callGemini(prompt);
+      out.textContent = text;
+    } catch(e) {
+      out.textContent = "エラー: " + e.message;
+    }
   };
-</script>
+  </script>
+
+</body>
+</html>
