@@ -1,1 +1,27 @@
-<!doctype html><title>test</title>
+<!doctype html>
+<meta charset="utf-8">
+<div id="wrap" style="font-family:system-ui; padding:12px">
+  <h3 style="margin:0 0 8px">AI Analysis Window</h3>
+
+  <div style="margin:6px 0 10px">
+    <button id="toggle">▼ 表示/縮小/非表示</button>
+    <span id="state" style="display:inline-block;background:#eef;border-radius:999px;padding:2px 8px;font-size:12px;margin-left:6px">表示中</span>
+  </div>
+
+  <div id="panel">
+    <textarea id="q" placeholder="このダッシュボードの傾向を要約して。" style="width:100%;min-height:90px"></textarea>
+    <div><button id="run" style="margin-top:6px">AI分析</button></div>
+    <pre id="out" style="white-space:pre-wrap;background:#f7f7f7;padding:8px;border-radius:6px;margin-top:8px">（ここに結果）</pre>
+  </div>
+
+  <hr style="margin:12px 0">
+
+  <div>
+    <h4 style="margin:0 0 6px">拠点別：月別の新規患者数を表示</h4>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <input id="site" placeholder="拠点名（例：そよ風）" style="padding:6px">
+      <button id="btnMonthly">増患数推移</button>
+    </div>
+    <pre id="monthly" style="white-space:pre-wrap;background:#f7f7f7;padding:8px;border-radius:6px;margin-top:8px">（ここに「4月 ○○名」形式を表示）</pre>
+  </div>
+</div>
