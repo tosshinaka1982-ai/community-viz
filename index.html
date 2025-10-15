@@ -65,7 +65,7 @@
 // ▼ 今日だけ使うAPIキー（実験後は必ず無効化/削除）
 const GEMINI_API_KEY = "YOUR_API_KEY_HERE"; // ←差し替え
 
-async function callGemini(prompt, model = "gemini-2.0-pro") {
+async function callGemini(prompt, model = "gemini-2.5-pro") {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
   const payload = { contents: [{ role: "user", parts: [{ text: prompt }]}] };
 
