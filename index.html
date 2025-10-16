@@ -1,29 +1,27 @@
 <!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>AI Analysis POC</title>
-  <style>
-    body {
-      font-family: system-ui;
-      margin: 20px;
-      line-height: 1.5;
-    }
-    textarea { width: 100%; min-height: 120px; margin-top: 8px; }
-    button { padding: 8px 16px; margin-top: 8px; }
-    pre { background: #f7f7f7; padding: 12px; border-radius: 8px; white-space: pre-wrap; }
-  </style>
-</head>
-<body>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>AI Analysis POC</title>
+    <style>
+      body { font-family: system-ui; padding: 16px; background: #fafafa; }
+      textarea { width: 100%; min-height: 120px; margin-top: 8px; }
+      pre { background: #fff; padding: 12px; border-radius: 8px; white-space: pre-wrap; }
+      button { margin-top: 8px; padding: 8px 12px; }
+    </style>
+  </head>
+  <body>
+    <h2>AI Analysis (POC)</h2>
+    <p>↓ ダッシュボード傾向などを入力してAI分析できます。</p>
 
-  <h2>AI分析ウィンドウ（POC）</h2>
-  <textarea id="q" placeholder="例：2025年下期で増患が多かった拠点を分析して"></textarea>
-  <br>
-  <button id="run">AI分析</button>
-  <pre id="out">（ここに結果が出ます）</pre>
+    <textarea id="prompt" placeholder="例：そよ風の患者増加傾向を分析して"></textarea>
+    <button id="run">AI分析</button>
 
-  <!-- ✅ seed-data（データ埋め込み） -->
+    <h3>結果</h3>
+    <pre id="output">（ここに結果が出ます）</pre>
+
+    <!-- 🔹 seed data -->
 <script type="application/json" id="seed-data">
 {
   "schema": ["拠点名","25/04","25/05","25/06","25/07","25/08","25/09","25/10","25/11","総計"],
@@ -56,96 +54,49 @@
   ]
 }
 </script>
-  
-  <!-- ✅ AI分析スクリプト -->
-  <script>
-  const GEMINI_API_KEY = "AIzaSyB1Qf-xLUvF6NZpGXl9r4EHEhNyKrvdXTk"; // ← 差し替え
 
-<script>
-// ▼ 今日だけ使うAPIキー（実験後は必ず無効化/削除）
-const GEMINI_API_KEY = "AIzaSyB1Qf-xLUvF6NZpGXl9r4EHEhNyKrvdXTk"; // ←差し替え
 
-async function callGemini(prompt, model = "gemini-2.5-pro") {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
-  const payload = { contents: [{ role: "user", parts: [{ text: prompt }]}] };
+    <script>
+      const API_KEY = "AIzaSyB1Qf-xLUvF6NZpGXl9r4EHEhNyKrvdXTk";
+      const MODEL = "gemini-2.5-pro";
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
+      async function callGemini(prompt, data) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
+        const body = {
+          contents: [{
+            role: "user",
+            parts: [{
+              text: `次のデータを分析して：\n${JSON.stringify(data)}\n\n質問:${prompt}`
+            }]
+          }]
+        };
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+          const err = await res.text();
+          throw new Error(err);
+        }
+        const json = await res.json();
+        return json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "(応答なし)";
+      }
 
-  // 失敗時は本文も返して原因を見える化
-  if (!res.ok) {
-    const body = await res.text();
-    console.error("Gemini error", res.status, body);
-    throw new Error(`Gemini HTTP ${res.status}\n${body}`);
-  }
+      document.getElementById("run").addEventListener("click", async () => {
+        const prompt = document.getElementById("prompt").value.trim();
+        const seedData = JSON.parse(document.getElementById("seed-data").textContent);
+        const out = document.getElementById("output");
+        if (!prompt) return out.textContent = "質問を入力してください。";
 
-  const json = await res.json();
-  const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-  return text || "(応答なし)";
-}
-
-// （任意）seed-data を要約して AI に文脈として渡す
-function seedSummaryForPrompt() {
-  const el = document.getElementById("seed-data");
-  if (!el) return "";
-  const json = JSON.parse(el.textContent);
-  const head = json.schema || [];
-  const rows = json.rows || [];
-  const iSite = 0;
-
-  // "25/04" のような列を抽出
-  const monthCols = head.map((h,i)=>({h,i})).filter(c => /^\d{2}\/\d{2}$/.test(c.h));
-  let total = 0;
-  const bySite = {};
-
-  for (const r of rows) {
-    const site = String(r[iSite]||"").trim();
-    if (!site) continue;
-    let s = 0;
-    for (const c of monthCols) {
-      const v = r[c.i];
-      if (v == null || v === "") continue;
-      const n = Number(v) || 0;
-      s += n; total += n;
-    }
-    if (s) bySite[site] = (bySite[site] || 0) + s;
-  }
-
-  const top = Object.entries(bySite).sort((a,b)=>b[1]-a[1]).slice(0,3)
-               .map(([k,v])=>`${k}:${v}`).join(", ");
-  return `期間合計:${total} / 上位拠点:${top}`;
-}
-
-document.getElementById("run").onclick = async () => {
-  const q = (document.getElementById("q").value || "").trim();
-  const out = document.getElementById("out");
-  if (!q) { out.textContent = "テキストを入力してください。"; return; }
-
-  // LookerのURLクエリで期間が付いていれば表示用に使う
-  const p = new URLSearchParams(location.search);
-  const start = p.get("start") || "(未指定)";
-  const end   = p.get("end")   || "(未指定)";
-
-  // seed-data の軽要約をプロンプトに添付（任意）
-  const summary = seedSummaryForPrompt();
-
-  const fullPrompt = [
-    "あなたはBIダッシュボードのアナリストです。",
-    `対象期間: ${start} ～ ${end}`,
-    summary ? `データ要約: ${summary}` : "",
-    `ユーザー入力: ${q}`,
-    "矛盾があれば指摘し、簡潔に洞察と次のアクションを示してください。"
-  ].filter(Boolean).join("\n");
-
-  out.textContent = "分析中…";
-  try {
-    const text = await callGemini(fullPrompt);
-    out.textContent = text;
-  } catch (e) {
-    out.textContent = "エラー:\n" + e.message;
-  }
-};
-</script>
+        out.textContent = "分析中...";
+        try {
+          const result = await callGemini(prompt, seedData);
+          out.textContent = result;
+        } catch (err) {
+          out.textContent = "エラー: " + err.message;
+        }
+      });
+    </script>
+  </body>
+</html>
